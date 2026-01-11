@@ -28,6 +28,10 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
+/* List of processes in THREAD_BLOCKED state, that is, processes
+   that are waiting for an event to trigger. */
+static struct list blocked_list;
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -108,6 +112,7 @@ thread_init (void) {
 	/* Init the globla thread context */
 	lock_init (&tid_lock);
 	list_init (&ready_list);
+	list_init (&blocked_list);
 	list_init (&destruction_req);
 
 	/* Set up a thread structure for the running thread. */
@@ -308,6 +313,53 @@ thread_yield (void) {
 	intr_set_level (old_level);
 }
 
+static bool
+compare_wakeup_tick (const struct list_elem *a, const struct list_elem *b, void *aux) {
+	struct thread *t_a = list_entry (a, struct thread, elem);
+	struct thread *t_b = list_entry (b, struct thread, elem);
+
+	return t_a->wakeup_tick < t_b->wakeup_tick;
+}
+
+/*	현재 스레드를 THREAD_BLOCKED 상태로 변환하고, blocked_list에 삽입 후 Blocked 시킨다.
+	인터럽트 핸들링 상태이거나, 현재 스레드가 idle_thread라면 오류 발생.
+	blocked_list에 삽입시, wakeup_tick이 적은 순으로 넣어줘야 함에 유의 */
+void
+thread_sleep (int64_t wakeup_tick) {
+	struct thread *curr = thread_current ();
+	enum intr_level old_level;
+
+	ASSERT (!intr_context ());
+	ASSERT (curr != idle_thread);
+
+	old_level = intr_disable ();
+
+	curr->wakeup_tick = wakeup_tick;
+	list_insert_ordered (&blocked_list, &curr->elem, compare_wakeup_tick, NULL);
+
+	thread_block();
+
+	intr_set_level (old_level);
+}
+
+/*	blocked_list에서 스레드를 깨우는 함수. Interupt Handling 상태일 때만 실행된다.
+	blocked_list가 정렬되어 있음이 보장되어 있을 때 정상적으로 동작*/
+void
+thread_wake (int64_t ticks) {
+	ASSERT (intr_context ());
+
+	while (!list_empty(&blocked_list)) {
+		struct thread *t = list_entry(list_begin(&blocked_list), struct thread, elem);
+
+		if (ticks >= t->wakeup_tick) {
+			list_pop_front(&blocked_list);
+			thread_unblock(t);
+		} else {
+			break;
+		}
+	}
+}
+
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) {
@@ -408,6 +460,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	strlcpy (t->name, name, sizeof t->name);
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
+	t->wakeup_tick = -1;		// wakeup_tick 초기화
 	t->magic = THREAD_MAGIC;
 }
 

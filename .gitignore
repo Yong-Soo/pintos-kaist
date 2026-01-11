@@ -1,0 +1,42 @@
+# --- Pintos-KAIST 전용 .gitignore ---
+
+# 모든 build 폴더와 그 내용물 무시
+**/build/
+
+# 컴파일 결과물 및 목적 파일
+*.o
+*.d
+*.bin
+*.elf
+*.a
+
+# 테스트 결과 파일 및 출력 로그
+*.output
+*.result
+*.log
+*.tar
+
+# 커널 및 로더 이미지 (build 폴더 밖에서 생성될 경우 대비)
+threads/kernel.bin
+userprog/kernel.bin
+vm/kernel.bin
+filesys/kernel.bin
+threads/loader.bin
+userprog/loader.bin
+vm/loader.bin
+filesys/loader.bin
+
+# 가상 머신 및 디버깅 부산물
+*.vmdk
+*.vmsd
+*.vmx
+*.vmxf
+.gdb_history
+.gdbinit
+
+# OS 및 에디터 관련 파일
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*~

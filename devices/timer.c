@@ -92,9 +92,9 @@ void
 timer_sleep (int64_t ticks) {
 	int64_t start = timer_ticks ();
 
-	ASSERT (intr_get_level () == INTR_ON);
-	while (timer_elapsed (start) < ticks)
-		thread_yield ();
+	int64_t wakeup_tick = start + ticks;
+
+	thread_sleep (wakeup_tick);
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -120,11 +120,12 @@ void
 timer_print_stats (void) {
 	printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
-
+
 /* Timer interrupt handler. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
+	thread_wake (ticks);	// 현재 tick에 해당하는 스레드들을 깨운다.
 	thread_tick ();
 }
 
