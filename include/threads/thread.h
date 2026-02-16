@@ -11,7 +11,7 @@
 
 
 /* States in a thread's life cycle. */
-enum thread_status {
+enum thread_status { 
 	THREAD_RUNNING,     /* Running thread. */
 	THREAD_READY,       /* Not running but ready to run. */
 	THREAD_BLOCKED,     /* Waiting for an event to trigger. */
@@ -98,6 +98,12 @@ struct thread {
 	/* Project 1: Alarm Clock */
 	int64_t wakeup_tick;				/* 이 스레드가 깨어나야 할 절대적인 시간(tick) */
 
+	/* Project 1: Priority Scheduling */
+	int init_priority;					/* 원래 가지고 있던 우선순위 (기부받기 전 )*/
+	struct lock *wait_on_lock;			/* 현재 이 스레드가 얻으려고 대기 중인 Lock */
+	struct list donations;				/* 나에게 우선순위를 기부해준 스레드들의 리스트 */
+	struct list_elem donation_elem;		/* 위 리스트에 들어가기 위한 엘리먼트 */
+
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
@@ -141,6 +147,11 @@ void thread_wake (int64_t tick);	// sleep된 thread를 깨우는 함수
 
 int thread_get_priority (void);
 void thread_set_priority (int);
+void test_max_priority (void);
+
+void thread_donate_priority (struct lock *lock);
+void thread_hold_lock (struct lock *lock);
+void thread_release_lock (struct lock *lock);
 
 int thread_get_nice (void);
 void thread_set_nice (int);

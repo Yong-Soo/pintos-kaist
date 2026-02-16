@@ -66,6 +66,9 @@ static void init_thread (struct thread *, const char *name, int priority);
 static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
+static void donate_priority (void);
+static void thread_update_priority (struct thread *t);
+
 
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
@@ -253,6 +256,62 @@ compare_thread_priority (const struct list_elem *a, const struct list_elem *b, v
 	return t_a->priority > t_b->priority;
 }
 
+void
+thread_donate_priority (struct lock *lock) {
+	struct thread *curr = thread_current ();
+	curr->wait_on_lock = lock;
+
+	// 주인의 기부 명단에 나를 올림
+	list_insert_ordered (&lock->holder->donations, &curr->donation_elem, compare_thread_priority, NULL);
+
+	// Chain Donation 수행
+	donate_priority ();
+}
+
+static void donate_priority (void) {
+	struct thread *curr = thread_current ();
+	struct thread *temp = curr;
+
+	/* 최대 8단계까지만 추적 (Depth limit )*/
+	for (int i = 0; i < 8; i++) {
+		if (temp->wait_on_lock == NULL) break;
+
+		struct thread *holder = temp->wait_on_lock->holder;
+
+		if (holder->priority < curr->priority) {
+			holder->priority = curr->priority;
+			temp = holder;
+		} else {
+			break;
+		}
+	}
+}
+
+void
+thread_hold_lock (struct lock *lock) {
+	struct thread *curr = thread_current ();
+	curr->wait_on_lock = NULL;
+	lock->holder = curr;
+}
+
+void
+thread_release_lock (struct lock *lock) {
+	struct thread *curr = thread_current ();
+	struct list_elem *e;
+
+	for (e = list_begin (&curr->donations); e != list_end (&curr->donations);) {
+		struct thread *t = list_entry (e, struct thread, donation_elem);
+
+		if (t->wait_on_lock == lock) {
+			e = list_remove (e);
+		} else {
+			e = list_next (e);
+		}
+	}
+
+	thread_update_priority (curr);
+}
+
 /* Transitions a blocked thread T to the ready-to-run state.
    This is an error if T is not blocked.  (Use thread_yield() to
    make the running thread ready.)
@@ -271,6 +330,7 @@ thread_unblock (struct thread *t) {
 	ASSERT (t->status == THREAD_BLOCKED);
 	list_insert_ordered (&ready_list, &t->elem, compare_thread_priority, NULL);
 	t->status = THREAD_READY;
+	
 	intr_set_level (old_level);
 }
 
@@ -387,7 +447,10 @@ thread_wake (int64_t ticks) {
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) {
-	thread_current ()->priority = new_priority;
+	struct thread *curr = thread_current ();
+	curr->init_priority = new_priority;
+
+	thread_update_priority (curr);
 
 	test_max_priority();
 }
@@ -396,6 +459,21 @@ thread_set_priority (int new_priority) {
 int
 thread_get_priority (void) {
 	return thread_current ()->priority;
+}
+
+/* priority를 init_priority로 초기화하고,
+	donations 리스트가 비어있지 않다면 가장 높은 점수로 갱신*/
+static void
+thread_update_priority (struct thread *t) {
+	t->priority = t->init_priority;
+
+	if (!list_empty (&t->donations)) {
+		struct thread *f = list_entry (list_front (&t->donations), struct thread, donation_elem);
+
+		if (f->priority > t->priority) {
+			t->priority = f->priority;
+		}
+	}
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -488,6 +566,11 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->priority = priority;
 	t->wakeup_tick = -1;		// wakeup_tick 초기화
 	t->magic = THREAD_MAGIC;
+
+	/* Priority Donation 관련 필드 초기화 */
+	t->init_priority = priority;
+	t->wait_on_lock = NULL;
+	list_init (&t->donations);
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
