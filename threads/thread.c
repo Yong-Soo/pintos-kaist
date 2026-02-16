@@ -172,7 +172,7 @@ thread_print_stats (void) {
 void
 test_max_priority (void) {
 	if (!list_empty (&ready_list)) {
-		struct thread *highest_ready = list_entry (list_front (&ready_list), struct thread, elem);
+		struct thread *highest_ready = list_entry (list_back (&ready_list), struct thread, elem);
 		if (thread_get_priority() < highest_ready->priority) {
 			thread_yield();
 		}
@@ -248,12 +248,12 @@ thread_block (void) {
 
    To ensure that lower priority threads are placed earlier.
 */
-static bool
+bool
 compare_thread_priority (const struct list_elem *a, const struct list_elem *b, void *aux) {
 	struct thread *t_a = list_entry (a, struct thread, elem);
 	struct thread *t_b = list_entry (b, struct thread, elem);
 
-	return t_a->priority > t_b->priority;
+	return t_a->priority < t_b->priority;
 }
 
 void
@@ -468,7 +468,7 @@ thread_update_priority (struct thread *t) {
 	t->priority = t->init_priority;
 
 	if (!list_empty (&t->donations)) {
-		struct thread *f = list_entry (list_front (&t->donations), struct thread, donation_elem);
+		struct thread *f = list_entry (list_back (&t->donations), struct thread, donation_elem);
 
 		if (f->priority > t->priority) {
 			t->priority = f->priority;
@@ -583,7 +583,7 @@ next_thread_to_run (void) {
 	if (list_empty (&ready_list))
 		return idle_thread;
 	else
-		return list_entry (list_pop_front (&ready_list), struct thread, elem);
+		return list_entry (list_pop_back (&ready_list), struct thread, elem);
 }
 
 /* Use iretq to launch the thread */

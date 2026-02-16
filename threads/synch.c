@@ -110,8 +110,14 @@ sema_up (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	if (!list_empty (&sema->waiters)) {
-		thread_unblock (list_entry (list_pop_front (&sema->waiters),
-					struct thread, elem));
+		/* 리스트에서 priority가 높은 요소 찾기 */
+        struct list_elem *max_elem = list_max (&sema->waiters, compare_thread_priority, NULL);
+        
+        /* 리스트에서 찾은 요소 제거 */
+        list_remove (max_elem);
+
+		/* 스레드 깨우기 */
+        thread_unblock (list_entry (max_elem, struct thread, elem));
 	}
 		
 	sema->value++;
